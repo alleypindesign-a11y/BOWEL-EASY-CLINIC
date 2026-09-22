@@ -477,14 +477,37 @@ function spacedWidth(ctx, text, spacing){
 }
 const NO_LINE_START = '）」』】》〉’”,.、。，：；！？!?)]}>';
 const NO_LINE_END = '（「『【《〈‘“([{<';
+// 「日期（禮拜幾）」視為不可拆的單位，換行時不會拆散日期跟括號裡的禮拜幾
+const TOKEN_RE = /\d{1,2}\/\d{1,2}（[日一二三四五六]）|[\s\S]/g;
+// 把不能當行首／行尾的符號直接黏到該依附的詞元上，換行只會發生在黏合後的詞元之間
+function tokenizeForWrap(text){
+  const raw = text.match(TOKEN_RE) || [text];
+  const merged = [];
+  for(const tok of raw){
+    if(merged.length && NO_LINE_START.includes(tok[0])){
+      merged[merged.length - 1] += tok;
+    } else {
+      merged.push(tok);
+    }
+  }
+  const out = [];
+  for(const tok of merged){
+    if(out.length && NO_LINE_END.includes(out[out.length - 1][out[out.length - 1].length - 1])){
+      out[out.length - 1] += tok;
+    } else {
+      out.push(tok);
+    }
+  }
+  return out;
+}
 function wrapByChar(ctx, text, maxWidth, spacing){
+  const tokens = tokenizeForWrap(text);
   const out = [];
   let line = '';
-  for(const ch of text){
-    const test = line + ch;
+  for(const tok of tokens){
+    const test = line + tok;
     const overWidth = line && spacedWidth(ctx, test, spacing) > maxWidth;
-    const forbidBreak = NO_LINE_START.includes(ch) || (line && NO_LINE_END.includes(line[line.length - 1]));
-    if(overWidth && !forbidBreak){ out.push(line); line = ch; }
+    if(overWidth){ out.push(line); line = tok; }
     else line = test;
   }
   if(line) out.push(line);
