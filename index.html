@@ -197,8 +197,6 @@ textarea { min-height: 80px; resize: vertical; line-height: 1.6; }
   font-size: 46px;
   line-height: 1.5;
   color: #2B2B2B;
-  white-space: pre-wrap;
-  letter-spacing: 0.1em;
 }
 .txt-footer {
   position:absolute;
@@ -472,11 +470,31 @@ function buildDuoriBodyRaw(){
 /* ---------- 文字量測／字距／換行（供預覽與下載共用） ---------- */
 const measureCtx = document.createElement('canvas').getContext('2d');
 
+// 「～」前後不額外加字距：全形波浪符號字型本身左右就有留白，
+// 再加字距視覺上會變成一個明顯的空白
+function gapAfter(ch, nextCh, spacing){
+  if(nextCh === undefined) return 0;
+  if(ch === '～' || nextCh === '～') return 0;
+  return spacing;
+}
 function spacedWidth(ctx, text, spacing){
+  const chars = Array.from(text);
   let w = 0;
-  for(const ch of text){ w += ctx.measureText(ch).width; }
-  if(text.length > 1) w += spacing * (text.length - 1);
+  for(const ch of chars){ w += ctx.measureText(ch).width; }
+  for(let i = 0; i < chars.length - 1; i++){ w += gapAfter(chars[i], chars[i+1], spacing); }
   return w;
+}
+// 畫面預覽用逐字 span 模擬字距，跟下載 PNG（canvas 逐字繪製）用同一套間距規則，
+// 避免瀏覽器 CSS letter-spacing 跟 canvas 量測結果對不上
+function escapeHTML(s){
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function renderSpacedLineHTML(text, spacing){
+  const chars = Array.from(text);
+  return chars.map((ch, i) => {
+    const gap = gapAfter(ch, chars[i+1], spacing);
+    return '<span style="margin-right:' + gap + 'px">' + escapeHTML(ch) + '</span>';
+  }).join('');
 }
 const NO_LINE_START = '）」』】》〉’”,.、。，：；！？!?)]}>';
 const NO_LINE_END = '（「『【《〈‘“([{<';
@@ -613,9 +631,11 @@ function buildStage(el, canvasW, canvasH, bgUrl, data){
   body.style.top = bTop + "px";
   body.style.height = boxH + "px";
   body.style.display = "flex";
+  body.style.flexDirection = "column";
   body.style.alignItems = "center";
   body.style.justifyContent = "center";
-  body.textContent = layout.lines.join('\n');
+  const bodySpacing = BODY_SIZE * LETTER_SPACING_RATIO;
+  body.innerHTML = layout.lines.map(ln => '<div>' + renderSpacedLineHTML(ln, bodySpacing) + '</div>').join('');
   el.appendChild(body);
 
   const footer = document.createElement("div");
@@ -667,10 +687,11 @@ function fillTextSpacedCentered(ctx, text, cx, y, spacing){
   let x = cx - totalW/2;
   const prevAlign = ctx.textAlign;
   ctx.textAlign = 'left';
-  for(const ch of text){
+  const chars = Array.from(text);
+  chars.forEach((ch, i) => {
     ctx.fillText(ch, x, y);
-    x += ctx.measureText(ch).width + spacing;
-  }
+    x += ctx.measureText(ch).width + gapAfter(ch, chars[i+1], spacing);
+  });
   ctx.textAlign = prevAlign;
 }
 
